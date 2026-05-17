@@ -41,7 +41,7 @@ async function fallbackSignup(email) {
     throw new Error(authError.message || 'Failed to send verification email.');
   }
 
-  const { error: insertError } = await client.from('subscribers').upsert(
+  const { error: insertError } = await client.from('subscibers').upsert(
     {
       email,
       signed_up_at: new Date().toISOString(),

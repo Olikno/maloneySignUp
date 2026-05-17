@@ -23,7 +23,7 @@
 
         async function markVerified(email) {
             const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            const { error } = await client.from('subscribers').update({
+            const { error } = await client.from('subscibers').update({
                 verified: true,
                 verified_at: new Date().toISOString()
             }).eq('email', email);

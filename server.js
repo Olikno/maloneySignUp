@@ -69,7 +69,7 @@ async function storeSubscriber(email) {
   }
 
   const { error } = await supabase
-    .from('subscribers')
+    .from('subscibers')
     .upsert({ email, signed_up_at: new Date().toISOString() }, { onConflict: ['email'] });
 
   if (error) {
@@ -84,7 +84,7 @@ async function markSubscriberVerified(email) {
   }
 
   const { error } = await supabase
-    .from('subscribers')
+    .from('subscibers')
     .update({ verified: true, verified_at: new Date().toISOString() })
     .eq('email', email);
 
