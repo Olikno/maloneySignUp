@@ -23,13 +23,26 @@
 
         async function markVerified(email) {
             const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            const { error } = await client.from('subscibers').update({
-                verified: true,
-                verified_at: new Date().toISOString()
-            }).eq('email', email);
+            const tableNames = ['subscibers', 'subscribers'];
 
-            if (error) {
+            for (const tableName of tableNames) {
+                const { error } = await client.from(tableName).update({
+                    verified: true,
+                    verified_at: new Date().toISOString()
+                }).eq('email', email);
+
+                if (!error) {
+                    return;
+                }
+
+                const missingMessage = `Could not find the table 'public.${tableName}'`;
+                if (error.message && error.message.includes(missingMessage)) {
+                    console.warn(`Supabase table ${tableName} not found; trying fallback table name.`);
+                    continue;
+                }
+
                 console.error('Supabase verify update error:', error);
+                return;
             }
         }
 

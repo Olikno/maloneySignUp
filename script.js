@@ -41,17 +41,35 @@ async function fallbackSignup(email) {
     throw new Error(authError.message || 'Failed to send verification email.');
   }
 
-  const { error: insertError } = await client.from('subscibers').upsert(
-    {
-      email,
-      signed_up_at: new Date().toISOString(),
-      verified: false
-    },
-    { onConflict: ['email'] }
-  );
+  const tableNames = ['subscibers', 'subscribers'];
+  let lastError = null;
 
-  if (insertError) {
+  for (const tableName of tableNames) {
+    const { error: insertError } = await client.from(tableName).upsert(
+      {
+        email,
+        signed_up_at: new Date().toISOString(),
+        verified: false
+      },
+      { onConflict: ['email'] }
+    );
+
+    if (!insertError) {
+      return;
+    }
+
+    lastError = insertError;
+    const missingMessage = `Could not find the table 'public.${tableName}'`;
+    if (insertError.message && insertError.message.includes(missingMessage)) {
+      console.warn(`Supabase table ${tableName} not found; trying fallback table name.`);
+      continue;
+    }
+
     throw new Error(insertError.message || 'Failed to save subscriber via Supabase.');
+  }
+
+  if (lastError) {
+    throw new Error(lastError.message || 'Failed to save subscriber via Supabase.');
   }
 }
 

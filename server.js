@@ -62,20 +62,37 @@ function isValidEmail(email) {
   return dotIndex > atIndex + 1 && dotIndex < cleaned.length - 1;
 }
 
+const subscriberTableNames = ['subscibers', 'subscribers'];
+
+async function tableOperation(email, callback) {
+  for (const tableName of subscriberTableNames) {
+    const { error } = await callback(tableName);
+    if (!error) {
+      return;
+    }
+
+    const missingMessage = `Could not find the table 'public.${tableName}'`;
+    if (error.message && error.message.includes(missingMessage)) {
+      console.warn(`Table ${tableName} not found; trying next fallback.`);
+      continue;
+    }
+
+    console.error('Supabase table operation error:', error.message || error);
+    throw error;
+  }
+
+  throw new Error('Could not find a valid subscribers table in Supabase.');
+}
+
 async function storeSubscriber(email) {
   if (!supabase) {
     console.warn('Supabase is not configured. Subscriber data will not be saved.');
     return;
   }
 
-  const { error } = await supabase
-    .from('subscibers')
-    .upsert({ email, signed_up_at: new Date().toISOString() }, { onConflict: ['email'] });
-
-  if (error) {
-    console.error('Supabase insert error:', error.message || error);
-    throw new Error('Failed to save subscriber data.');
-  }
+  await tableOperation(email, (tableName) =>
+    supabase.from(tableName).upsert({ email, signed_up_at: new Date().toISOString() }, { onConflict: ['email'] })
+  );
 }
 
 async function markSubscriberVerified(email) {
@@ -83,14 +100,9 @@ async function markSubscriberVerified(email) {
     return;
   }
 
-  const { error } = await supabase
-    .from('subscibers')
-    .update({ verified: true, verified_at: new Date().toISOString() })
-    .eq('email', email);
-
-  if (error) {
-    console.error('Supabase update error:', error.message || error);
-  }
+  await tableOperation(email, (tableName) =>
+    supabase.from(tableName).update({ verified: true, verified_at: new Date().toISOString() }).eq('email', email)
+  );
 }
 
 app.post('/signup', async (req, res) => {
