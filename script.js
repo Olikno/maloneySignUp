@@ -91,8 +91,6 @@ async function submitSignup(event) {
     const token = createVerificationToken(email);
     const verifyUrl = getVerifyUrl(email, token);
     const templateParams = {
-      // These keys should match the variables in your EmailJS template.
-      // Include multiple common recipient fields in case the template expects a different name.
       to_email: email,
       user_email: email,
       recipient_email: email,
