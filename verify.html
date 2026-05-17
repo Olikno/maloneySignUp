@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verified</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="card">
+        <div class="banner">
+            <span class="banner-text">EMAIL VERIFIED</span>
+        </div>
+        <span class="card__title">Verification Result</span>
+        <p class="card__subtitle" id="verify-message">Verifying your email...</p>
+        <p class="card__subtitle"><a id="home-link" href="index.html">Return to homepage</a></p>
+    </div>
+    <script>
+        function decodeToken(token) {
+            try {
+                const decoded = decodeURIComponent(atob(token));
+                return JSON.parse(decoded);
+            } catch (err) {
+                return null;
+            }
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+        const messageEl = document.getElementById('verify-message');
+
+        if (!token) {
+            messageEl.textContent = 'Missing verification token. Please use the link from your email.';
+        } else {
+            const payload = decodeToken(token);
+            if (!payload || !payload.email || !payload.createdAt) {
+                messageEl.textContent = 'Invalid or corrupted verification link.';
+            } else {
+                const age = Date.now() - payload.createdAt;
+                const expiryMs = 1000 * 60 * 15;
+                if (age > expiryMs) {
+                    messageEl.textContent = 'This verification link has expired. Please request a new signup email.';
+                } else {
+                    messageEl.textContent = `Success! ${payload.email} has been verified.`;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
