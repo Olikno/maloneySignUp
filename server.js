@@ -3,6 +3,7 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const dotenv = require('dotenv');
+const { createClient } = require('@supabase/supabase-js');
 
 dotenv.config();
 
@@ -14,6 +15,12 @@ const smtpPort = parseInt(process.env.SMTP_PORT, 10) || 587;
 const smtpUser = process.env.SMTP_USER;
 const smtpPass = process.env.SMTP_PASS;
 let fromEmail = process.env.FROM_EMAIL || smtpUser;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const supabase = supabaseUrl && supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, { auth: { persistSession: false } })
+  : null;
 
 const verificationTokens = new Map();
 const tokenTTL = 15 * 60 * 1000; // 15 minutes
@@ -55,11 +62,48 @@ function isValidEmail(email) {
   return dotIndex > atIndex + 1 && dotIndex < cleaned.length - 1;
 }
 
+async function storeSubscriber(email) {
+  if (!supabase) {
+    console.warn('Supabase is not configured. Subscriber data will not be saved.');
+    return;
+  }
+
+  const { error } = await supabase
+    .from('subscribers')
+    .upsert({ email, signed_up_at: new Date().toISOString() }, { onConflict: ['email'] });
+
+  if (error) {
+    console.error('Supabase insert error:', error.message || error);
+    throw new Error('Failed to save subscriber data.');
+  }
+}
+
+async function markSubscriberVerified(email) {
+  if (!supabase) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('subscribers')
+    .update({ verified: true, verified_at: new Date().toISOString() })
+    .eq('email', email);
+
+  if (error) {
+    console.error('Supabase update error:', error.message || error);
+  }
+}
+
 app.post('/signup', async (req, res) => {
   const { email } = req.body;
 
   if (!email || !isValidEmail(email)) {
     return res.status(400).json({ error: 'Invalid email address.' });
+  }
+
+  try {
+    await storeSubscriber(email);
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Failed to save subscriber data.' });
   }
 
   const token = generateVerificationToken();
@@ -92,7 +136,7 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-app.get('/verify', (req, res) => {
+app.get('/verify', async (req, res) => {
   const { token } = req.query;
 
   if (!token || typeof token !== 'string') {
@@ -105,6 +149,8 @@ app.get('/verify', (req, res) => {
   }
 
   verificationTokens.delete(token);
+  await markSubscriberVerified(stored.email);
+
   res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Verified</title><link rel="stylesheet" href="/style.css"></head><body><div class="card"><div class="banner"><span class="banner-text">WELCOME</span><span class="banner-text">VERIFIED</span></div><span class="card__title">Email verified</span><p class="card__subtitle">Thank you, your email has been verified.</p></div></body></html>`);
 });
 

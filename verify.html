@@ -15,36 +15,50 @@
         <p class="card__subtitle" id="verify-message">Verifying your email...</p>
         <p class="card__subtitle"><a id="home-link" href="index.html">Return to homepage</a></p>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
     <script>
-        function decodeToken(token) {
-            try {
-                const decoded = decodeURIComponent(atob(token));
-                return JSON.parse(decoded);
-            } catch (err) {
-                return null;
-            }
-        }
-
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get('token');
+        const SUPABASE_URL = 'https://bzcyefocafeiebezobpi.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6Y3llZm9jYWZlaWViZXpvYnBpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNDEyNDMsImV4cCI6MjA5NDYxNzI0M30.loITdVw-I9vsEmiDLx1YYJny4ZO5OGM_tGbQ0MB51BU';
         const messageEl = document.getElementById('verify-message');
 
-        if (!token) {
-            messageEl.textContent = 'Missing verification token. Please use the link from your email.';
-        } else {
-            const payload = decodeToken(token);
-            if (!payload || !payload.email || !payload.createdAt) {
-                messageEl.textContent = 'Invalid or corrupted verification link.';
-            } else {
-                const age = Date.now() - payload.createdAt;
-                const expiryMs = 1000 * 60 * 15;
-                if (age > expiryMs) {
-                    messageEl.textContent = 'This verification link has expired. Please request a new signup email.';
-                } else {
-                    messageEl.textContent = `Success! ${payload.email} has been verified.`;
-                }
+        async function markVerified(email) {
+            const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            const { error } = await client.from('subscribers').update({
+                verified: true,
+                verified_at: new Date().toISOString()
+            }).eq('email', email);
+
+            if (error) {
+                console.error('Supabase verify update error:', error);
             }
         }
+
+        async function init() {
+            if (!window.supabase) {
+                messageEl.textContent = 'Unable to load Supabase. Please try again later.';
+                return;
+            }
+
+            const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            const { data, error } = await client.auth.getSessionFromUrl({ storeSession: false });
+
+            if (error) {
+                console.error('Supabase verify error:', error);
+                messageEl.textContent = 'Unable to verify your email. Please use the link in your email again.';
+                return;
+            }
+
+            const email = data?.session?.user?.email;
+            if (!email) {
+                messageEl.textContent = 'Verification link not recognized. Please open the link from your email.';
+                return;
+            }
+
+            await markVerified(email);
+            messageEl.textContent = `Success! ${email} has been verified.`;
+        }
+
+        init();
     </script>
 </body>
 </html>
