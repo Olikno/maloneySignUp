@@ -1,17 +1,4 @@
-﻿/*
-  EmailJS setup for GitHub Pages
-
-  1. Create an EmailJS service and template.
-  2. Use these template fields:
-       - to_email
-       - verify_link
-       - email_subject
-       - email_message
-  3. In EmailJS template editor, set:
-       Subject: {{email_subject}}
-       Body: Hello,\nPlease verify your email by clicking the link below:\n<a href="{{verify_link}}">Verify email</a>\n{{email_message}}
-  4. Update SERVICE_ID, TEMPLATE_ID, PUBLIC_KEY below.
-*/
+﻿
 
 const form = document.getElementById('signup-form');
 const emailInput = document.getElementById('email-input');
@@ -60,6 +47,21 @@ function clearError() {
   }
 }
 
+function formatEmailJSError(err) {
+  if (!err) return 'Unable to send verification email. Please try again later.';
+  if (typeof err === 'string') return err;
+  if (err.text) return err.text;
+  if (err.status || err.statusText) {
+    return `EmailJS error ${err.status || ''}: ${err.statusText || err.message || 'Check your service/template configuration.'}`.trim();
+  }
+  if (err.message) return err.message;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'Unable to send verification email. Please try again later.';
+  }
+}
+
 async function submitSignup(event) {
   event.preventDefault();
   const email = emailInput.value.trim();
@@ -79,11 +81,17 @@ async function submitSignup(event) {
     return;
   }
 
+  if (typeof emailjs === 'undefined') {
+    showError('EmailJS library is not loaded. Make sure the EmailJS CDN script is included before script.js.');
+    return;
+  }
+
   try {
     emailjs.init(EMAILJS_PUBLIC_KEY);
     const token = createVerificationToken(email);
     const verifyUrl = getVerifyUrl(email, token);
     const templateParams = {
+      // These keys must match the variables in your EmailJS template
       to_email: email,
       verify_link: verifyUrl,
       email_subject: 'Verify your signup',
@@ -91,10 +99,14 @@ async function submitSignup(event) {
     };
 
     const result = await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, templateParams);
+    if (result && result.status && result.status >= 300) {
+      throw result;
+    }
+
     window.location.href = `check-email.html?email=${encodeURIComponent(email)}`;
   } catch (err) {
-    console.error(err);
-    showError('Unable to send verification email. Please try again later.');
+    console.error('EmailJS send error:', err);
+    showError(formatEmailJSError(err));
   }
 }
 
