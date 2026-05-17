@@ -8,6 +8,24 @@ const SUPABASE_URL = 'https://bzcyefocafeiebezobpi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6Y3llZm9jYWZlaWViZXpvYnBpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNDEyNDMsImV4cCI6MjA5NDYxNzI0M30.loITdVw-I9vsEmiDLx1YYJny4ZO5OGM_tGbQ0MB51BU';
 const IS_LOCALHOST = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const USE_STATIC_SUPABASE_FALLBACK = !IS_LOCALHOST;
+const EMAIL_SEND_COOLDOWN_MS = 60 * 1000;
+
+function getSignupStorageKey(email) {
+  return `signup-last-sent-${email}`;
+}
+
+function getLastEmailSentAt(email) {
+  return parseInt(localStorage.getItem(getSignupStorageKey(email)), 10) || 0;
+}
+
+function setLastEmailSentAt(email) {
+  localStorage.setItem(getSignupStorageKey(email), Date.now().toString());
+}
+
+function isRateLimitError(err) {
+  const message = (err?.message || err?.error_description || err?.statusText || '').toString();
+  return err?.status === 429 || /rate limit|too many requests|rate-limited/i.test(message);
+}
 
 function validateEmail(value) {
   if (typeof value !== 'string') return false;
@@ -38,6 +56,9 @@ async function fallbackSignup(email) {
   });
 
   if (authError) {
+    if (isRateLimitError(authError)) {
+      throw new Error('Email rate limit exceeded. Please wait a minute before trying again.');
+    }
     throw new Error(authError.message || 'Failed to send verification email.');
   }
 
@@ -65,10 +86,16 @@ async function fallbackSignup(email) {
       continue;
     }
 
+    if (isRateLimitError(insertError)) {
+      throw new Error('Email rate limit exceeded. Please wait a minute before trying again.');
+    }
     throw new Error(insertError.message || 'Failed to save subscriber via Supabase.');
   }
 
   if (lastError) {
+    if (isRateLimitError(lastError)) {
+      throw new Error('Email rate limit exceeded. Please wait a minute before trying again.');
+    }
     throw new Error(lastError.message || 'Failed to save subscriber via Supabase.');
   }
 }
@@ -102,6 +129,15 @@ async function submitSignup(event) {
     return;
   }
 
+  const lastSentAt = getLastEmailSentAt(email);
+  const now = Date.now();
+  const retryAfterMs = EMAIL_SEND_COOLDOWN_MS - (now - lastSentAt);
+  if (retryAfterMs > 0) {
+    showError(`Email rate limit exceeded. Please wait ${Math.ceil(retryAfterMs / 1000)} seconds before trying again.`);
+    emailInput.focus();
+    return;
+  }
+
   clearError();
   emailInput.classList.remove('invalid');
 
@@ -115,6 +151,7 @@ async function submitSignup(event) {
     });
 
     if (response.ok) {
+      setLastEmailSentAt(email);
       window.location.href = `check-email.html?email=${encodeURIComponent(email)}`;
       return;
     }
@@ -131,6 +168,7 @@ async function submitSignup(event) {
     if (shouldFallback) {
       try {
         await fallbackSignup(email);
+        setLastEmailSentAt(email);
         window.location.href = `check-email.html?email=${encodeURIComponent(email)}`;
         return;
       } catch (fallbackError) {
