@@ -1,3 +1,9 @@
+*{
+  font-family: bowlby one, ultra, sans-serif;
+}
+
+
+
 .card {
   width: min(90vw, 320px);
   padding: 30px;
